@@ -176,7 +176,7 @@ void aws_iot_task(void *param) {
 	}
 	img = camera_get_fb();
 
-    paramsQOS0.qos = QOS0;
+    paramsQOS0.qos = QOS1;
     paramsQOS0.payload = (void *) img;
     paramsQOS0.isRetained = 0;
 
@@ -196,21 +196,21 @@ void aws_iot_task(void *param) {
         size_t counter = 0;
         while (counter < total_size) {
         	paramsQOS0.payloadLen = ((total_size - counter) < chunk_size) ? (total_size - counter) : chunk_size;
-        	paramsQOS0.payload = ((void *) img) + counter;
+        	paramsQOS0.payload = (void *)(img + counter);
         	ESP_LOGI(TAG, "Payload Length is: %u", paramsQOS0.payloadLen);
         	rc = aws_iot_mqtt_publish(&client, TOPIC, TOPIC_LEN, &paramsQOS0);
-        	if (SUCCESS != rc) {
-        		ESP_LOGE(TAG, "Publish was unsuccessful with error = %d", rc);
+        	if (rc == MQTT_REQUEST_TIMEOUT_ERROR) {
+            	ESP_LOGW(TAG, "QOS1 publish ack not received.");
+            	rc = SUCCESS;
         	}
         	counter += chunk_size;
         }
-        vTaskDelay(15000/portTICK_RATE_MS);
-
         err = camera_run();
 		if (err != ESP_OK) {
 			ESP_LOGD(TAG, "Camera capture failed with error = %d", err);
 			abort();
 		}
+        vTaskDelay(15000/portTICK_RATE_MS);
 		img = camera_get_fb();
     }
 
