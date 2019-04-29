@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -158,9 +159,6 @@ void aws_iot_task(void *param) {
         abort();
     }
 
-    const char *TOPIC = "topic/camerafeed";
-    const int TOPIC_LEN = strlen(TOPIC);
-
     /*
     ESP_LOGI(TAG, "Subscribing...");
     rc = aws_iot_mqtt_subscribe(&client, TOPIC, TOPIC_LEN, QOS0, iot_subscribe_callback_handler, NULL);
@@ -179,8 +177,17 @@ void aws_iot_task(void *param) {
     paramsQOS0.qos = QOS1;
     paramsQOS0.payload = (void *) img;
     paramsQOS0.isRetained = 0;
+    char *NEWTOPIC = malloc(11);
+    int NEW_TOPIC_LEN;
+    char buf[11];
+    time_t t;
 
     while((NETWORK_ATTEMPTING_RECONNECT == rc || NETWORK_RECONNECTED == rc || SUCCESS == rc)) {
+        t = time(NULL);
+        ESP_LOGI(TAG, "Timestamp: %lu", t);
+        sprintf(buf, "%lu", t);
+        strcpy(NEWTOPIC, buf);
+        NEW_TOPIC_LEN = strlen(NEWTOPIC);
 
         //Max time the yield function will wait for read messages
         rc = aws_iot_mqtt_yield(&client, 100);
@@ -198,19 +205,19 @@ void aws_iot_task(void *param) {
         	paramsQOS0.payloadLen = ((total_size - counter) < chunk_size) ? (total_size - counter) : chunk_size;
         	paramsQOS0.payload = (void *)(img + counter);
         	ESP_LOGI(TAG, "Payload Length is: %u", paramsQOS0.payloadLen);
-        	rc = aws_iot_mqtt_publish(&client, TOPIC, TOPIC_LEN, &paramsQOS0);
+        	rc = aws_iot_mqtt_publish(&client, NEWTOPIC, NEW_TOPIC_LEN, &paramsQOS0);
         	if (rc == MQTT_REQUEST_TIMEOUT_ERROR) {
             	ESP_LOGW(TAG, "QOS1 publish ack not received.");
             	rc = SUCCESS;
         	}
         	counter += chunk_size;
         }
+        vTaskDelay(60000/portTICK_RATE_MS);
         err = camera_run();
-		if (err != ESP_OK) {
-			ESP_LOGD(TAG, "Camera capture failed with error = %d", err);
-			abort();
-		}
-        vTaskDelay(15000/portTICK_RATE_MS);
+        if (err != ESP_OK) {
+            ESP_LOGD(TAG, "Camera capture failed with error = %d", err);
+            abort();
+        }
 		img = camera_get_fb();
     }
 
